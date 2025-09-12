@@ -1,0 +1,157 @@
+import PlaylistController from '@/actions/App/Http/Controllers/PlaylistController';
+import { PlaceholderPattern } from "@/components/ui/placeholder-pattern";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import AppLayout from "@/layouts/app-layout";
+import { index as playlistsIndex, create as playlistsCreate } from "@/routes/playlists";
+import { BreadcrumbItem } from "@/types";
+import { Head, Link, useForm } from "@inertiajs/react";
+import { Plus, Trash2, MoreVertical } from "lucide-react";
+import { useState } from "react";
+
+interface Playlist {
+    id: number;
+    name: string;
+    description?: string;
+    created_at: string;
+    updated_at: string;
+}
+
+interface PlaylistsProps {
+    playlists: Playlist[];
+}
+
+const breadcrumbs: BreadcrumbItem[] = [
+    {
+        title: 'Playlists',
+        href: playlistsIndex().url,
+    },
+];
+
+interface DeletePlaylistDialogProps {
+    playlist: Playlist;
+    isOpen: boolean;
+    onClose: () => void;
+}
+
+function DeletePlaylistDialog({ playlist, isOpen, onClose }: DeletePlaylistDialogProps) {
+    const { delete: destroy, processing } = useForm();
+
+    const handleDelete = () => {
+        destroy(PlaylistController.destroy.url({ playlist: playlist.id }), {
+            onSuccess: () => {
+                onClose();
+            },
+            onError: () => {
+                // Keep dialog open on error so user can see error messages
+            }
+        });
+    };
+
+    return (
+        <Dialog open={isOpen} onOpenChange={onClose}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Delete Playlist</DialogTitle>
+                    <DialogDescription>
+                        Are you sure you want to delete "{playlist.name}"? This action cannot be undone.
+                    </DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                    <Button variant="outline" onClick={onClose} disabled={processing}>
+                        Cancel
+                    </Button>
+                    <Button variant="destructive" onClick={handleDelete} disabled={processing}>
+                        {processing ? 'Deleting...' : 'Delete Playlist'}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+export default function Playlists({ playlists: playlistsData }: PlaylistsProps) {
+    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+    const [playlistToDelete, setPlaylistToDelete] = useState<Playlist | null>(null);
+
+    const handleDeleteClick = (playlist: Playlist) => {
+        setPlaylistToDelete(playlist);
+        setDeleteDialogOpen(true);
+    };
+
+    const handleDeleteDialogClose = () => {
+        setDeleteDialogOpen(false);
+        setPlaylistToDelete(null);
+    };
+
+    return (
+        <AppLayout breadcrumbs={breadcrumbs}>
+            <Head title="Playlists" />
+            <div className="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-xl p-4">
+                <div className="flex items-center justify-between">
+                    <h1 className="text-2xl font-bold">My Playlists</h1>
+                    <Link href={playlistsCreate().url}>
+                        <Button>
+                            <Plus className="mr-2 h-4 w-4" />
+                            Create Playlist
+                        </Button>
+                    </Link>
+                </div>
+                
+                {playlistsData.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center flex-1 text-center">
+                        <PlaceholderPattern className="h-32 w-32 stroke-neutral-900/20 dark:stroke-neutral-100/20" />
+                        <h3 className="mt-4 text-lg font-semibold">No playlists yet</h3>
+                        <p className="mt-2 text-sm text-muted-foreground">
+                            Create your first playlist to get started
+                        </p>
+                        <Link href={playlistsCreate().url} className="mt-4">
+                            <Button>
+                                <Plus className="mr-2 h-4 w-4" />
+                                Create Your First Playlist
+                            </Button>
+                        </Link>
+                    </div>
+                ) : (
+                    <div className="grid auto-rows-min gap-4 md:grid-cols-2 lg:grid-cols-3">
+                        {playlistsData.map((playlist) => (
+                            <div key={playlist.id} className="relative aspect-video overflow-hidden rounded-xl border border-sidebar-border/70 dark:border-sidebar-border bg-card group">
+                                <div className="p-4 h-full flex flex-col justify-between">
+                                    <div>
+                                        <div className="flex items-start justify-between">
+                                            <h3 className="font-semibold text-lg pr-2">{playlist.name}</h3>
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 p-0"
+                                                onClick={() => handleDeleteClick(playlist)}
+                                            >
+                                                <Trash2 className="h-4 w-4 text-destructive" />
+                                            </Button>
+                                        </div>
+                                        {playlist.description && (
+                                            <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                                                {playlist.description}
+                                            </p>
+                                        )}
+                                    </div>
+                                    <div className="text-xs text-muted-foreground mt-2">
+                                        Created {new Date(playlist.created_at).toLocaleDateString()}
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+
+                {playlistToDelete && (
+                    <DeletePlaylistDialog
+                        playlist={playlistToDelete}
+                        isOpen={deleteDialogOpen}
+                        onClose={handleDeleteDialogClose}
+                    />
+                )}
+            </div>
+        </AppLayout>
+    );
+}
