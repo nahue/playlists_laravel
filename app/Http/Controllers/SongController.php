@@ -160,4 +160,73 @@ class SongController extends Controller
         
         return response()->json($metadata);
     }
+
+    /**
+     * Import Spotify album or playlist and override the current playlist
+     */
+    public function importSpotifyContent(Request $request, Playlist $playlist)
+    {
+        // Ensure the user can only import to their own playlists
+        if ($playlist->user_id !== Auth::id()) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        $request->validate([
+            'spotify_url' => 'required|string|max:500',
+        ]);
+
+        $spotifyService = new SpotifyService();
+        $metadata = null;
+
+        // Determine if it's an album or playlist
+        if ($spotifyService->isValidSpotifyAlbumUrl($request->spotify_url)) {
+            $metadata = $spotifyService->getAlbumMetadata($request->spotify_url);
+        } elseif ($spotifyService->isValidSpotifyPlaylistUrl($request->spotify_url)) {
+            $metadata = $spotifyService->getPlaylistMetadata($request->spotify_url);
+        } else {
+            return response()->json([
+                'error' => 'Invalid Spotify album or playlist URL'
+            ], 400);
+        }
+
+        if (!$metadata || empty($metadata['tracks'])) {
+            return response()->json([
+                'error' => 'Could not fetch tracks from Spotify'
+            ], 400);
+        }
+
+        // Clear existing songs
+        $playlist->songs()->delete();
+
+        // Update playlist name and description
+        $playlist->update([
+            'name' => $metadata['name'],
+            'description' => $metadata['description'],
+        ]);
+
+        // Add all tracks
+        foreach ($metadata['tracks'] as $index => $trackData) {
+            $playlist->songs()->create([
+                'title' => $trackData['title'],
+                'artist' => $trackData['artist'],
+                'album' => $trackData['album'],
+                'duration' => $trackData['duration'],
+                'url' => $trackData['url'],
+                'spotify_url' => $trackData['spotify_url'],
+                'order' => $index + 1,
+            ]);
+        }
+
+        Log::info('Successfully imported Spotify content', [
+            'playlist_id' => $playlist->id,
+            'tracks_count' => count($metadata['tracks']),
+            'source_url' => $request->spotify_url
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => "Successfully imported {$metadata['name']} with " . count($metadata['tracks']) . " tracks",
+            'tracks_count' => count($metadata['tracks'])
+        ]);
+    }
 }

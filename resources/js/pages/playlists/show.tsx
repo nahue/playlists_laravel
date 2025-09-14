@@ -8,7 +8,7 @@ import AppLayout from "@/layouts/app-layout";
 import { index as playlistsIndex, show as playlistsShow } from "@/routes/playlists";
 import { BreadcrumbItem } from "@/types";
 import { Head, Link, useForm, router } from "@inertiajs/react";
-import { ArrowLeft, Edit, Trash2, Calendar, User, Plus, Music, ExternalLink, Clock, Loader2 } from "lucide-react";
+import { ArrowLeft, Edit, Trash2, Calendar, User, Plus, Music, ExternalLink, Clock, Loader2, Download } from "lucide-react";
 import { useState } from "react";
 
 interface Song {
@@ -58,6 +58,12 @@ interface AddSongDialogProps {
 interface DeleteSongDialogProps {
     song: Song;
     playlistId: number;
+    isOpen: boolean;
+    onClose: () => void;
+}
+
+interface ImportSpotifyDialogProps {
+    playlist: Playlist;
     isOpen: boolean;
     onClose: () => void;
 }
@@ -340,10 +346,107 @@ function DeleteSongDialog({ song, playlistId, isOpen, onClose }: DeleteSongDialo
     );
 }
 
+function ImportSpotifyDialog({ playlist, isOpen, onClose }: ImportSpotifyDialogProps) {
+    const [spotifyUrl, setSpotifyUrl] = useState('');
+    const [isImporting, setIsImporting] = useState(false);
+    const [error, setError] = useState('');
+
+    const handleImport = async () => {
+        if (!spotifyUrl.trim()) {
+            setError('Please enter a Spotify URL');
+            return;
+        }
+
+        setIsImporting(true);
+        setError('');
+
+        try {
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+            
+            const response = await fetch(`/playlists/${playlist.id}/import-spotify`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken || '',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json',
+                },
+                body: JSON.stringify({ spotify_url: spotifyUrl }),
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                console.log('Import successful:', result);
+                setSpotifyUrl('');
+                onClose();
+                // Refresh the page to show the imported content
+                window.location.reload();
+            } else {
+                const errorData = await response.json();
+                setError(errorData.error || 'Failed to import from Spotify');
+            }
+        } catch (error) {
+            console.error('Error importing from Spotify:', error);
+            setError('Failed to import from Spotify');
+        } finally {
+            setIsImporting(false);
+        }
+    };
+
+    return (
+        <Dialog open={isOpen} onOpenChange={onClose}>
+            <DialogContent className="max-w-md">
+                <DialogHeader>
+                    <DialogTitle>Import from Spotify</DialogTitle>
+                    <DialogDescription>
+                        Import an album or playlist from Spotify. This will replace all current songs in "{playlist.name}".
+                    </DialogDescription>
+                </DialogHeader>
+                
+                <div className="space-y-4">
+                    <div className="space-y-2">
+                        <Label htmlFor="import_spotify_url">Spotify Album or Playlist URL</Label>
+                        <Input
+                            id="import_spotify_url"
+                            value={spotifyUrl}
+                            onChange={(e) => setSpotifyUrl(e.target.value)}
+                            placeholder="https://open.spotify.com/album/... or https://open.spotify.com/playlist/..."
+                        />
+                        <p className="text-xs text-muted-foreground">
+                            Paste a Spotify album or playlist URL to import all tracks
+                        </p>
+                        {error && <p className="text-sm text-destructive">{error}</p>}
+                    </div>
+                </div>
+
+                <DialogFooter>
+                    <Button type="button" variant="outline" onClick={onClose} disabled={isImporting}>
+                        Cancel
+                    </Button>
+                    <Button onClick={handleImport} disabled={isImporting || !spotifyUrl.trim()}>
+                        {isImporting ? (
+                            <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                Importing...
+                            </>
+                        ) : (
+                            <>
+                                <Download className="mr-2 h-4 w-4" />
+                                Import & Replace
+                            </>
+                        )}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
 export default function PlaylistShow({ playlist }: PlaylistShowProps) {
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [addSongDialogOpen, setAddSongDialogOpen] = useState(false);
     const [deleteSongDialogOpen, setDeleteSongDialogOpen] = useState(false);
+    const [importSpotifyDialogOpen, setImportSpotifyDialogOpen] = useState(false);
     const [songToDelete, setSongToDelete] = useState<Song | null>(null);
 
     const breadcrumbs: BreadcrumbItem[] = [
@@ -407,6 +510,10 @@ export default function PlaylistShow({ playlist }: PlaylistShowProps) {
                         <Button variant="outline" size="sm" onClick={handleAddSongClick}>
                             <Plus className="mr-2 h-4 w-4" />
                             Add Song
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => setImportSpotifyDialogOpen(true)}>
+                            <Download className="mr-2 h-4 w-4" />
+                            Import from Spotify
                         </Button>
                         <Button variant="outline" size="sm">
                             <Edit className="mr-2 h-4 w-4" />
@@ -577,6 +684,12 @@ export default function PlaylistShow({ playlist }: PlaylistShowProps) {
                         onClose={handleDeleteSongDialogClose}
                     />
                 )}
+                
+                <ImportSpotifyDialog
+                    playlist={playlist}
+                    isOpen={importSpotifyDialogOpen}
+                    onClose={() => setImportSpotifyDialogOpen(false)}
+                />
             </div>
         </AppLayout>
     );

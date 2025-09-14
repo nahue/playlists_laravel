@@ -23,6 +23,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     
     // Spotify metadata route
     Route::post('songs/spotify-metadata', [App\Http\Controllers\SongController::class, 'fetchSpotifyMetadata'])->name('songs.spotify-metadata');
+    
+    // Spotify import route
+    Route::post('playlists/{playlist}/import-spotify', [App\Http\Controllers\SongController::class, 'importSpotifyContent'])->name('playlists.import-spotify');
 });
 
 require __DIR__.'/settings.php';
