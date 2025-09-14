@@ -20,6 +20,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('playlists/{playlist}/songs/{song}', [App\Http\Controllers\SongController::class, 'update'])->name('songs.update');
     Route::delete('playlists/{playlist}/songs/{song}', [App\Http\Controllers\SongController::class, 'destroy'])->name('songs.destroy');
     Route::post('playlists/{playlist}/songs/reorder', [App\Http\Controllers\SongController::class, 'reorder'])->name('songs.reorder');
+    
+    // Spotify metadata route
+    Route::post('songs/spotify-metadata', [App\Http\Controllers\SongController::class, 'fetchSpotifyMetadata'])->name('songs.spotify-metadata');
 });
 
 require __DIR__.'/settings.php';

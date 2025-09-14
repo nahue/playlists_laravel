@@ -7,8 +7,8 @@ import { Textarea } from "@/components/ui/textarea";
 import AppLayout from "@/layouts/app-layout";
 import { index as playlistsIndex, show as playlistsShow } from "@/routes/playlists";
 import { BreadcrumbItem } from "@/types";
-import { Head, Link, useForm } from "@inertiajs/react";
-import { ArrowLeft, Edit, Trash2, Calendar, User, Plus, Music, ExternalLink, Clock } from "lucide-react";
+import { Head, Link, useForm, router } from "@inertiajs/react";
+import { ArrowLeft, Edit, Trash2, Calendar, User, Plus, Music, ExternalLink, Clock, Loader2 } from "lucide-react";
 import { useState } from "react";
 
 interface Song {
@@ -18,6 +18,7 @@ interface Song {
     album?: string;
     duration?: number;
     url?: string;
+    spotify_url?: string;
     notes?: string;
     order: number;
     created_at: string;
@@ -104,8 +105,65 @@ function AddSongDialog({ playlist, isOpen, onClose }: AddSongDialogProps) {
         album: '',
         duration: '',
         url: '',
+        spotify_url: '',
         notes: '',
     });
+
+    const [isLoadingMetadata, setIsLoadingMetadata] = useState(false);
+
+    const fetchSpotifyMetadata = async (spotifyUrl: string) => {
+        if (!spotifyUrl.trim()) return;
+
+        setIsLoadingMetadata(true);
+        try {
+            // Get CSRF token from meta tag
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+            
+            console.log('CSRF Token:', csrfToken ? 'Found' : 'Not found');
+            console.log('Spotify URL:', spotifyUrl);
+            
+            const response = await fetch('/songs/spotify-metadata', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken || '',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json',
+                },
+                body: JSON.stringify({ spotify_url: spotifyUrl }),
+            });
+
+            console.log('Response status:', response.status);
+            console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+
+            if (response.ok) {
+                const metadata = await response.json();
+                console.log('Metadata received:', metadata);
+                setData({
+                    ...data,
+                    title: metadata.title || data.title,
+                    artist: metadata.artist || data.artist,
+                    album: metadata.album || data.album,
+                    duration: metadata.duration || data.duration,
+                    url: metadata.url || data.url,
+                    spotify_url: spotifyUrl,
+                });
+            } else {
+                const errorText = await response.text();
+                console.error('Failed to fetch Spotify metadata:', response.status, errorText);
+                try {
+                    const error = JSON.parse(errorText);
+                    console.error('Parsed error:', error);
+                } catch (e) {
+                    console.error('Could not parse error response as JSON');
+                }
+            }
+        } catch (error) {
+            console.error('Error fetching Spotify metadata:', error);
+        } finally {
+            setIsLoadingMetadata(false);
+        }
+    };
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -182,7 +240,37 @@ function AddSongDialog({ playlist, isOpen, onClose }: AddSongDialogProps) {
                     </div>
 
                     <div className="space-y-2">
-                        <Label htmlFor="url">URL</Label>
+                        <Label htmlFor="spotify_url">Spotify URL</Label>
+                        <div className="flex gap-2">
+                            <Input
+                                id="spotify_url"
+                                value={data.spotify_url}
+                                onChange={(e) => setData('spotify_url', e.target.value)}
+                                placeholder="https://open.spotify.com/track/..."
+                                className="flex-1"
+                            />
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => fetchSpotifyMetadata(data.spotify_url)}
+                                disabled={isLoadingMetadata || !data.spotify_url.trim()}
+                            >
+                                {isLoadingMetadata ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                    'Load'
+                                )}
+                            </Button>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                            Paste a Spotify track URL to automatically fill in song details
+                        </p>
+                        {errors.spotify_url && <p className="text-sm text-destructive">{errors.spotify_url}</p>}
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label htmlFor="url">Other URL</Label>
                         <Input
                             id="url"
                             type="url"
@@ -412,12 +500,24 @@ export default function PlaylistShow({ playlist }: PlaylistShowProps) {
                                         <div className="flex-1 min-w-0">
                                             <div className="flex items-center gap-2">
                                                 <h3 className="font-medium truncate">{song.title}</h3>
-                                                {song.url && (
+                                                {song.spotify_url && (
+                                                    <a 
+                                                        href={song.spotify_url} 
+                                                        target="_blank" 
+                                                        rel="noopener noreferrer"
+                                                        className="text-green-600 hover:text-green-700"
+                                                        title="Open in Spotify"
+                                                    >
+                                                        <Music className="h-4 w-4" />
+                                                    </a>
+                                                )}
+                                                {song.url && song.url !== song.spotify_url && (
                                                     <a 
                                                         href={song.url} 
                                                         target="_blank" 
                                                         rel="noopener noreferrer"
                                                         className="text-muted-foreground hover:text-foreground"
+                                                        title="Open external link"
                                                     >
                                                         <ExternalLink className="h-4 w-4" />
                                                     </a>

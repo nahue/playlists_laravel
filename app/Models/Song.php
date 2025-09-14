@@ -13,6 +13,7 @@ class Song extends Model
         'album',
         'duration',
         'url',
+        'spotify_url',
         'notes',
         'playlist_id',
         'order',
