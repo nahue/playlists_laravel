@@ -1,15 +1,16 @@
 import PlaylistController from '@/actions/App/Http/Controllers/PlaylistController';
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import AppLayout from "@/layouts/app-layout";
-import { index as playlistsIndex, show as playlistsShow } from "@/routes/playlists";
-import { BreadcrumbItem } from "@/types";
-import { Head, Link, useForm, router } from "@inertiajs/react";
-import { ArrowLeft, Edit, Trash2, Calendar, User, Plus, Music, ExternalLink, Clock, Loader2, Download } from "lucide-react";
-import { useState } from "react";
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { useAudioPlayerContext } from '@/contexts/audio-player-context';
+import AppLayout from '@/layouts/app-layout';
+import { index as playlistsIndex, show as playlistsShow } from '@/routes/playlists';
+import { BreadcrumbItem } from '@/types';
+import { Head, Link, useForm } from '@inertiajs/react';
+import { ArrowLeft, Calendar, Clock, Download, Edit, ExternalLink, Loader2, Music, Pause, Play, Plus, Trash2, User } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 interface Song {
     id: number;
@@ -78,7 +79,7 @@ function DeletePlaylistDialog({ playlist, isOpen, onClose }: DeletePlaylistDialo
             },
             onError: () => {
                 // Keep dialog open on error so user can see error messages
-            }
+            },
         });
     };
 
@@ -87,9 +88,7 @@ function DeletePlaylistDialog({ playlist, isOpen, onClose }: DeletePlaylistDialo
             <DialogContent>
                 <DialogHeader>
                     <DialogTitle>Delete Playlist</DialogTitle>
-                    <DialogDescription>
-                        Are you sure you want to delete "{playlist.name}"? This action cannot be undone.
-                    </DialogDescription>
+                    <DialogDescription>Are you sure you want to delete "{playlist.name}"? This action cannot be undone.</DialogDescription>
                 </DialogHeader>
                 <DialogFooter>
                     <Button variant="outline" onClick={onClose} disabled={processing}>
@@ -124,17 +123,17 @@ function AddSongDialog({ playlist, isOpen, onClose }: AddSongDialogProps) {
         try {
             // Get CSRF token from meta tag
             const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
-            
+
             console.log('CSRF Token:', csrfToken ? 'Found' : 'Not found');
             console.log('Spotify URL:', spotifyUrl);
-            
+
             const response = await fetch('/songs/spotify-metadata', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRF-TOKEN': csrfToken || '',
                     'X-Requested-With': 'XMLHttpRequest',
-                    'Accept': 'application/json',
+                    Accept: 'application/json',
                 },
                 body: JSON.stringify({ spotify_url: spotifyUrl }),
             });
@@ -161,7 +160,7 @@ function AddSongDialog({ playlist, isOpen, onClose }: AddSongDialogProps) {
                     const error = JSON.parse(errorText);
                     console.error('Parsed error:', error);
                 } catch (e) {
-                    console.error('Could not parse error response as JSON');
+                    console.error('Could not parse error response as JSON', e);
                 }
             }
         } catch (error) {
@@ -181,31 +180,17 @@ function AddSongDialog({ playlist, isOpen, onClose }: AddSongDialogProps) {
         });
     };
 
-    const formatDuration = (seconds: number) => {
-        const mins = Math.floor(seconds / 60);
-        const secs = seconds % 60;
-        return `${mins}:${secs.toString().padStart(2, '0')}`;
-    };
-
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
             <DialogContent className="max-w-md">
                 <DialogHeader>
                     <DialogTitle>Add Song to Playlist</DialogTitle>
-                    <DialogDescription>
-                        Add a new song to "{playlist.name}"
-                    </DialogDescription>
+                    <DialogDescription>Add a new song to "{playlist.name}"</DialogDescription>
                 </DialogHeader>
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="space-y-2">
                         <Label htmlFor="title">Title *</Label>
-                        <Input
-                            id="title"
-                            value={data.title}
-                            onChange={(e) => setData('title', e.target.value)}
-                            placeholder="Song title"
-                            required
-                        />
+                        <Input id="title" value={data.title} onChange={(e) => setData('title', e.target.value)} placeholder="Song title" required />
                         {errors.title && <p className="text-sm text-destructive">{errors.title}</p>}
                     </div>
 
@@ -223,12 +208,7 @@ function AddSongDialog({ playlist, isOpen, onClose }: AddSongDialogProps) {
 
                     <div className="space-y-2">
                         <Label htmlFor="album">Album</Label>
-                        <Input
-                            id="album"
-                            value={data.album}
-                            onChange={(e) => setData('album', e.target.value)}
-                            placeholder="Album name"
-                        />
+                        <Input id="album" value={data.album} onChange={(e) => setData('album', e.target.value)} placeholder="Album name" />
                         {errors.album && <p className="text-sm text-destructive">{errors.album}</p>}
                     </div>
 
@@ -262,16 +242,10 @@ function AddSongDialog({ playlist, isOpen, onClose }: AddSongDialogProps) {
                                 onClick={() => fetchSpotifyMetadata(data.spotify_url)}
                                 disabled={isLoadingMetadata || !data.spotify_url.trim()}
                             >
-                                {isLoadingMetadata ? (
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                    'Load'
-                                )}
+                                {isLoadingMetadata ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Load'}
                             </Button>
                         </div>
-                        <p className="text-xs text-muted-foreground">
-                            Paste a Spotify track URL to automatically fill in song details
-                        </p>
+                        <p className="text-xs text-muted-foreground">Paste a Spotify track URL to automatically fill in song details</p>
                         {errors.spotify_url && <p className="text-sm text-destructive">{errors.spotify_url}</p>}
                     </div>
 
@@ -362,14 +336,14 @@ function ImportSpotifyDialog({ playlist, isOpen, onClose }: ImportSpotifyDialogP
 
         try {
             const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
-            
+
             const response = await fetch(`/playlists/${playlist.id}/import-spotify`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRF-TOKEN': csrfToken || '',
                     'X-Requested-With': 'XMLHttpRequest',
-                    'Accept': 'application/json',
+                    Accept: 'application/json',
                 },
                 body: JSON.stringify({ spotify_url: spotifyUrl }),
             });
@@ -402,7 +376,7 @@ function ImportSpotifyDialog({ playlist, isOpen, onClose }: ImportSpotifyDialogP
                         Import an album or playlist from Spotify. This will replace all current songs in "{playlist.name}".
                     </DialogDescription>
                 </DialogHeader>
-                
+
                 <div className="space-y-4">
                     <div className="space-y-2">
                         <Label htmlFor="import_spotify_url">Spotify Album or Playlist URL</Label>
@@ -412,9 +386,7 @@ function ImportSpotifyDialog({ playlist, isOpen, onClose }: ImportSpotifyDialogP
                             onChange={(e) => setSpotifyUrl(e.target.value)}
                             placeholder="https://open.spotify.com/album/... or https://open.spotify.com/playlist/..."
                         />
-                        <p className="text-xs text-muted-foreground">
-                            Paste a Spotify album or playlist URL to import all tracks
-                        </p>
+                        <p className="text-xs text-muted-foreground">Paste a Spotify album or playlist URL to import all tracks</p>
                         {error && <p className="text-sm text-destructive">{error}</p>}
                     </div>
                 </div>
@@ -448,6 +420,15 @@ export default function PlaylistShow({ playlist }: PlaylistShowProps) {
     const [deleteSongDialogOpen, setDeleteSongDialogOpen] = useState(false);
     const [importSpotifyDialogOpen, setImportSpotifyDialogOpen] = useState(false);
     const [songToDelete, setSongToDelete] = useState<Song | null>(null);
+
+    const audioPlayer = useAudioPlayerContext();
+
+    // Set the playlist when component mounts
+    useEffect(() => {
+        if (audioPlayer && audioPlayer.setPlaylist) {
+            audioPlayer.setPlaylist(playlist.songs);
+        }
+    }, [playlist.songs, audioPlayer]);
 
     const breadcrumbs: BreadcrumbItem[] = [
         {
@@ -532,9 +513,7 @@ export default function PlaylistShow({ playlist }: PlaylistShowProps) {
                     <div className="space-y-4">
                         <div>
                             <h1 className="text-3xl font-bold tracking-tight">{playlist.name}</h1>
-                            {playlist.description && (
-                                <p className="mt-2 text-lg text-muted-foreground">{playlist.description}</p>
-                            )}
+                            {playlist.description && <p className="mt-2 text-lg text-muted-foreground">{playlist.description}</p>}
                         </div>
                     </div>
 
@@ -584,14 +563,12 @@ export default function PlaylistShow({ playlist }: PlaylistShowProps) {
                                 Add Song
                             </Button>
                         </div>
-                        
+
                         {playlist.songs.length === 0 ? (
                             <div className="rounded-lg border p-8 text-center">
                                 <Music className="mx-auto h-12 w-12 text-muted-foreground" />
                                 <p className="mt-4 text-muted-foreground">No songs added yet</p>
-                                <p className="mt-1 text-sm text-muted-foreground">
-                                    Add your first song to get started
-                                </p>
+                                <p className="mt-1 text-sm text-muted-foreground">Add your first song to get started</p>
                                 <Button className="mt-4" onClick={handleAddSongClick}>
                                     <Plus className="mr-2 h-4 w-4" />
                                     Add Your First Song
@@ -599,83 +576,113 @@ export default function PlaylistShow({ playlist }: PlaylistShowProps) {
                             </div>
                         ) : (
                             <div className="space-y-2">
-                                {playlist.songs.map((song, index) => (
-                                    <div key={song.id} className="flex items-center gap-4 rounded-lg border p-4 hover:bg-muted/50 transition-colors">
-                                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-sm font-medium">
-                                            {index + 1}
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-2">
-                                                <h3 className="font-medium truncate">{song.title}</h3>
-                                                {song.spotify_url && (
-                                                    <a 
-                                                        href={song.spotify_url} 
-                                                        target="_blank" 
-                                                        rel="noopener noreferrer"
-                                                        className="text-green-600 hover:text-green-700"
-                                                        title="Open in Spotify"
-                                                    >
-                                                        <Music className="h-4 w-4" />
-                                                    </a>
-                                                )}
-                                                {song.url && song.url !== song.spotify_url && (
-                                                    <a 
-                                                        href={song.url} 
-                                                        target="_blank" 
-                                                        rel="noopener noreferrer"
-                                                        className="text-muted-foreground hover:text-foreground"
-                                                        title="Open external link"
-                                                    >
-                                                        <ExternalLink className="h-4 w-4" />
-                                                    </a>
+                                {playlist.songs.map((song, index) => {
+                                    const isCurrentSong = audioPlayer?.currentSong?.id === song.id;
+                                    const isPlaying = audioPlayer?.isPlaying && isCurrentSong;
+
+                                    return (
+                                        <div
+                                            key={song.id}
+                                            className="flex items-center gap-4 rounded-lg border p-4 transition-colors hover:bg-muted/50"
+                                        >
+                                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-sm font-medium">
+                                                {isCurrentSong && isPlaying ? (
+                                                    <div className="flex items-center justify-center">
+                                                        <div className="h-2 w-2 animate-pulse rounded-full bg-primary"></div>
+                                                    </div>
+                                                ) : (
+                                                    index + 1
                                                 )}
                                             </div>
-                                            <p className="text-sm text-muted-foreground truncate">
-                                                {song.artist}
-                                                {song.album && ` • ${song.album}`}
-                                            </p>
-                                            {song.notes && (
-                                                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                                                    {song.notes}
-                                                </p>
-                                            )}
-                                        </div>
-                                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                            {song.duration && (
-                                                <div className="flex items-center gap-1">
-                                                    <Clock className="h-4 w-4" />
-                                                    {formatDuration(song.duration)}
+                                            <div className="min-w-0 flex-1">
+                                                <div className="flex items-center gap-2">
+                                                    <h3 className="truncate font-medium">{song.title}</h3>
+                                                    {song.spotify_url && (
+                                                        <a
+                                                            href={song.spotify_url}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="text-green-600 hover:text-green-700"
+                                                            title="Open in Spotify"
+                                                        >
+                                                            <Music className="h-4 w-4" />
+                                                        </a>
+                                                    )}
+                                                    {song.url && song.url !== song.spotify_url && (
+                                                        <a
+                                                            href={song.url}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="text-muted-foreground hover:text-foreground"
+                                                            title="Open external link"
+                                                        >
+                                                            <ExternalLink className="h-4 w-4" />
+                                                        </a>
+                                                    )}
+                                                    {song.spotify_url && !song.url && (
+                                                        <span className="rounded bg-muted px-2 py-1 text-xs text-muted-foreground">Spotify only</span>
+                                                    )}
                                                 </div>
-                                            )}
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                className="h-8 w-8 p-0"
-                                                onClick={() => handleDeleteSongClick(song)}
-                                            >
-                                                <Trash2 className="h-4 w-4 text-destructive" />
-                                            </Button>
+                                                <p className="truncate text-sm text-muted-foreground">
+                                                    {song.artist}
+                                                    {song.album && ` • ${song.album}`}
+                                                </p>
+                                                {song.notes && <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{song.notes}</p>}
+                                            </div>
+                                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                                {song.duration && (
+                                                    <div className="flex items-center gap-1">
+                                                        <Clock className="h-4 w-4" />
+                                                        {formatDuration(song.duration)}
+                                                    </div>
+                                                )}
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="h-8 w-8 p-0"
+                                                    onClick={() => {
+                                                        // Check if it's a Spotify URL that can't be played directly
+                                                        const isSpotifyUrl =
+                                                            song.spotify_url &&
+                                                            (song.spotify_url.includes('open.spotify.com') || song.spotify_url.includes('spotify:'));
+                                                        const hasDirectUrl = song.url && !song.url.includes('open.spotify.com');
+
+                                                        if (isSpotifyUrl && !hasDirectUrl) {
+                                                            // Open Spotify URL directly
+                                                            window.open(song.spotify_url, '_blank');
+                                                        } else {
+                                                            // Try to play with audio player
+                                                            audioPlayer?.play(song);
+                                                        }
+                                                    }}
+                                                    disabled={!song.url && !song.spotify_url}
+                                                    title={
+                                                        !song.url && !song.spotify_url
+                                                            ? 'No audio URL available'
+                                                            : song.spotify_url && !song.url
+                                                              ? 'Open in Spotify'
+                                                              : 'Play song'
+                                                    }
+                                                >
+                                                    {isCurrentSong && isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                                                </Button>
+                                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => handleDeleteSongClick(song)}>
+                                                    <Trash2 className="h-4 w-4 text-destructive" />
+                                                </Button>
+                                            </div>
                                         </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         )}
                     </div>
                 </div>
 
                 {/* Dialogs */}
-                <DeletePlaylistDialog
-                    playlist={playlist}
-                    isOpen={deleteDialogOpen}
-                    onClose={handleDeleteDialogClose}
-                />
-                
-                <AddSongDialog
-                    playlist={playlist}
-                    isOpen={addSongDialogOpen}
-                    onClose={handleAddSongDialogClose}
-                />
-                
+                <DeletePlaylistDialog playlist={playlist} isOpen={deleteDialogOpen} onClose={handleDeleteDialogClose} />
+
+                <AddSongDialog playlist={playlist} isOpen={addSongDialogOpen} onClose={handleAddSongDialogClose} />
+
                 {songToDelete && (
                     <DeleteSongDialog
                         song={songToDelete}
@@ -684,12 +691,8 @@ export default function PlaylistShow({ playlist }: PlaylistShowProps) {
                         onClose={handleDeleteSongDialogClose}
                     />
                 )}
-                
-                <ImportSpotifyDialog
-                    playlist={playlist}
-                    isOpen={importSpotifyDialogOpen}
-                    onClose={() => setImportSpotifyDialogOpen(false)}
-                />
+
+                <ImportSpotifyDialog playlist={playlist} isOpen={importSpotifyDialogOpen} onClose={() => setImportSpotifyDialogOpen(false)} />
             </div>
         </AppLayout>
     );

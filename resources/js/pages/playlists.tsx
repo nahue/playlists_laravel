@@ -1,13 +1,13 @@
 import PlaylistController from '@/actions/App/Http/Controllers/PlaylistController';
-import { PlaceholderPattern } from "@/components/ui/placeholder-pattern";
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import AppLayout from "@/layouts/app-layout";
-import { index as playlistsIndex, create as playlistsCreate, show as playlistsShow } from "@/routes/playlists";
-import { BreadcrumbItem } from "@/types";
-import { Head, Link, useForm } from "@inertiajs/react";
-import { Plus, Trash2, MoreVertical } from "lucide-react";
-import { useState } from "react";
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { PlaceholderPattern } from '@/components/ui/placeholder-pattern';
+import AppLayout from '@/layouts/app-layout';
+import { create as playlistsCreate, index as playlistsIndex, show as playlistsShow } from '@/routes/playlists';
+import { BreadcrumbItem } from '@/types';
+import { Head, Link, useForm } from '@inertiajs/react';
+import { Plus, Trash2 } from 'lucide-react';
+import { useState } from 'react';
 
 interface Playlist {
     id: number;
@@ -44,7 +44,7 @@ function DeletePlaylistDialog({ playlist, isOpen, onClose }: DeletePlaylistDialo
             },
             onError: () => {
                 // Keep dialog open on error so user can see error messages
-            }
+            },
         });
     };
 
@@ -53,9 +53,7 @@ function DeletePlaylistDialog({ playlist, isOpen, onClose }: DeletePlaylistDialo
             <DialogContent>
                 <DialogHeader>
                     <DialogTitle>Delete Playlist</DialogTitle>
-                    <DialogDescription>
-                        Are you sure you want to delete "{playlist.name}"? This action cannot be undone.
-                    </DialogDescription>
+                    <DialogDescription>Are you sure you want to delete "{playlist.name}"? This action cannot be undone.</DialogDescription>
                 </DialogHeader>
                 <DialogFooter>
                     <Button variant="outline" onClick={onClose} disabled={processing}>
@@ -97,14 +95,12 @@ export default function Playlists({ playlists: playlistsData }: PlaylistsProps) 
                         </Button>
                     </Link>
                 </div>
-                
+
                 {playlistsData.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center flex-1 text-center">
+                    <div className="flex flex-1 flex-col items-center justify-center text-center">
                         <PlaceholderPattern className="h-32 w-32 stroke-neutral-900/20 dark:stroke-neutral-100/20" />
                         <h3 className="mt-4 text-lg font-semibold">No playlists yet</h3>
-                        <p className="mt-2 text-sm text-muted-foreground">
-                            Create your first playlist to get started
-                        </p>
+                        <p className="mt-2 text-sm text-muted-foreground">Create your first playlist to get started</p>
                         <Link href={playlistsCreate().url} className="mt-4">
                             <Button>
                                 <Plus className="mr-2 h-4 w-4" />
@@ -115,19 +111,19 @@ export default function Playlists({ playlists: playlistsData }: PlaylistsProps) 
                 ) : (
                     <div className="grid auto-rows-min gap-4 md:grid-cols-2 lg:grid-cols-3">
                         {playlistsData.map((playlist) => (
-                            <div key={playlist.id} className="relative aspect-video overflow-hidden rounded-xl border border-sidebar-border/70 dark:border-sidebar-border bg-card group">
-                                <Link 
-                                    href={playlistsShow({ playlist: playlist.id }).url}
-                                    className="block h-full"
-                                >
-                                    <div className="p-4 h-full flex flex-col justify-between cursor-pointer hover:bg-muted/50 transition-colors">
+                            <div
+                                key={playlist.id}
+                                className="group relative aspect-video overflow-hidden rounded-xl border border-sidebar-border/70 bg-card dark:border-sidebar-border"
+                            >
+                                <Link href={playlistsShow({ playlist: playlist.id }).url} className="block h-full">
+                                    <div className="flex h-full cursor-pointer flex-col justify-between p-4 transition-colors hover:bg-muted/50">
                                         <div>
                                             <div className="flex items-start justify-between">
-                                                <h3 className="font-semibold text-lg pr-2">{playlist.name}</h3>
+                                                <h3 className="pr-2 text-lg font-semibold">{playlist.name}</h3>
                                                 <Button
                                                     variant="ghost"
                                                     size="sm"
-                                                    className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 p-0"
+                                                    className="h-8 w-8 p-0 opacity-0 transition-opacity group-hover:opacity-100"
                                                     onClick={(e) => {
                                                         e.preventDefault();
                                                         e.stopPropagation();
@@ -138,12 +134,10 @@ export default function Playlists({ playlists: playlistsData }: PlaylistsProps) 
                                                 </Button>
                                             </div>
                                             {playlist.description && (
-                                                <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                                                    {playlist.description}
-                                                </p>
+                                                <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{playlist.description}</p>
                                             )}
                                         </div>
-                                        <div className="text-xs text-muted-foreground mt-2">
+                                        <div className="mt-2 text-xs text-muted-foreground">
                                             Created {new Date(playlist.created_at).toLocaleDateString()}
                                         </div>
                                     </div>
@@ -153,13 +147,7 @@ export default function Playlists({ playlists: playlistsData }: PlaylistsProps) 
                     </div>
                 )}
 
-                {playlistToDelete && (
-                    <DeletePlaylistDialog
-                        playlist={playlistToDelete}
-                        isOpen={deleteDialogOpen}
-                        onClose={handleDeleteDialogClose}
-                    />
-                )}
+                {playlistToDelete && <DeletePlaylistDialog playlist={playlistToDelete} isOpen={deleteDialogOpen} onClose={handleDeleteDialogClose} />}
             </div>
         </AppLayout>
     );
