@@ -3,7 +3,7 @@ import { PlaceholderPattern } from "@/components/ui/placeholder-pattern";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import AppLayout from "@/layouts/app-layout";
-import { index as playlistsIndex, create as playlistsCreate } from "@/routes/playlists";
+import { index as playlistsIndex, create as playlistsCreate, show as playlistsShow } from "@/routes/playlists";
 import { BreadcrumbItem } from "@/types";
 import { Head, Link, useForm } from "@inertiajs/react";
 import { Plus, Trash2, MoreVertical } from "lucide-react";
@@ -116,29 +116,38 @@ export default function Playlists({ playlists: playlistsData }: PlaylistsProps) 
                     <div className="grid auto-rows-min gap-4 md:grid-cols-2 lg:grid-cols-3">
                         {playlistsData.map((playlist) => (
                             <div key={playlist.id} className="relative aspect-video overflow-hidden rounded-xl border border-sidebar-border/70 dark:border-sidebar-border bg-card group">
-                                <div className="p-4 h-full flex flex-col justify-between">
-                                    <div>
-                                        <div className="flex items-start justify-between">
-                                            <h3 className="font-semibold text-lg pr-2">{playlist.name}</h3>
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 p-0"
-                                                onClick={() => handleDeleteClick(playlist)}
-                                            >
-                                                <Trash2 className="h-4 w-4 text-destructive" />
-                                            </Button>
+                                <Link 
+                                    href={playlistsShow({ playlist: playlist.id }).url}
+                                    className="block h-full"
+                                >
+                                    <div className="p-4 h-full flex flex-col justify-between cursor-pointer hover:bg-muted/50 transition-colors">
+                                        <div>
+                                            <div className="flex items-start justify-between">
+                                                <h3 className="font-semibold text-lg pr-2">{playlist.name}</h3>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 p-0"
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        handleDeleteClick(playlist);
+                                                    }}
+                                                >
+                                                    <Trash2 className="h-4 w-4 text-destructive" />
+                                                </Button>
+                                            </div>
+                                            {playlist.description && (
+                                                <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                                                    {playlist.description}
+                                                </p>
+                                            )}
                                         </div>
-                                        {playlist.description && (
-                                            <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                                                {playlist.description}
-                                            </p>
-                                        )}
+                                        <div className="text-xs text-muted-foreground mt-2">
+                                            Created {new Date(playlist.created_at).toLocaleDateString()}
+                                        </div>
                                     </div>
-                                    <div className="text-xs text-muted-foreground mt-2">
-                                        Created {new Date(playlist.created_at).toLocaleDateString()}
-                                    </div>
-                                </div>
+                                </Link>
                             </div>
                         ))}
                     </div>

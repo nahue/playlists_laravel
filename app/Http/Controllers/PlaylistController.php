@@ -50,7 +50,17 @@ class PlaylistController extends Controller
      */
     public function show(Playlist $playlist)
     {
-        //
+        // Ensure the user can only view their own playlists
+        if ($playlist->user_id !== Auth::id()) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        // Load the user relationship
+        $playlist->load('user');
+
+        return Inertia::render('playlists/show', [
+            'playlist' => $playlist,
+        ]);
     }
 
     /**
