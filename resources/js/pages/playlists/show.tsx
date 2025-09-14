@@ -1,12 +1,28 @@
 import PlaylistController from '@/actions/App/Http/Controllers/PlaylistController';
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import AppLayout from "@/layouts/app-layout";
 import { index as playlistsIndex, show as playlistsShow } from "@/routes/playlists";
 import { BreadcrumbItem } from "@/types";
 import { Head, Link, useForm } from "@inertiajs/react";
-import { ArrowLeft, Edit, Trash2, Calendar, User } from "lucide-react";
+import { ArrowLeft, Edit, Trash2, Calendar, User, Plus, Music, ExternalLink, Clock } from "lucide-react";
 import { useState } from "react";
+
+interface Song {
+    id: number;
+    title: string;
+    artist: string;
+    album?: string;
+    duration?: number;
+    url?: string;
+    notes?: string;
+    order: number;
+    created_at: string;
+    updated_at: string;
+}
 
 interface Playlist {
     id: number;
@@ -19,6 +35,7 @@ interface Playlist {
         name: string;
         email: string;
     };
+    songs: Song[];
 }
 
 interface PlaylistShowProps {
@@ -27,6 +44,19 @@ interface PlaylistShowProps {
 
 interface DeletePlaylistDialogProps {
     playlist: Playlist;
+    isOpen: boolean;
+    onClose: () => void;
+}
+
+interface AddSongDialogProps {
+    playlist: Playlist;
+    isOpen: boolean;
+    onClose: () => void;
+}
+
+interface DeleteSongDialogProps {
+    song: Song;
+    playlistId: number;
     isOpen: boolean;
     onClose: () => void;
 }
@@ -67,8 +97,166 @@ function DeletePlaylistDialog({ playlist, isOpen, onClose }: DeletePlaylistDialo
     );
 }
 
+function AddSongDialog({ playlist, isOpen, onClose }: AddSongDialogProps) {
+    const { data, setData, post, processing, errors, reset } = useForm({
+        title: '',
+        artist: '',
+        album: '',
+        duration: '',
+        url: '',
+        notes: '',
+    });
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        post(`/playlists/${playlist.id}/songs`, {
+            onSuccess: () => {
+                reset();
+                onClose();
+            },
+        });
+    };
+
+    const formatDuration = (seconds: number) => {
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
+    };
+
+    return (
+        <Dialog open={isOpen} onOpenChange={onClose}>
+            <DialogContent className="max-w-md">
+                <DialogHeader>
+                    <DialogTitle>Add Song to Playlist</DialogTitle>
+                    <DialogDescription>
+                        Add a new song to "{playlist.name}"
+                    </DialogDescription>
+                </DialogHeader>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <div className="space-y-2">
+                        <Label htmlFor="title">Title *</Label>
+                        <Input
+                            id="title"
+                            value={data.title}
+                            onChange={(e) => setData('title', e.target.value)}
+                            placeholder="Song title"
+                            required
+                        />
+                        {errors.title && <p className="text-sm text-destructive">{errors.title}</p>}
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label htmlFor="artist">Artist *</Label>
+                        <Input
+                            id="artist"
+                            value={data.artist}
+                            onChange={(e) => setData('artist', e.target.value)}
+                            placeholder="Artist name"
+                            required
+                        />
+                        {errors.artist && <p className="text-sm text-destructive">{errors.artist}</p>}
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label htmlFor="album">Album</Label>
+                        <Input
+                            id="album"
+                            value={data.album}
+                            onChange={(e) => setData('album', e.target.value)}
+                            placeholder="Album name"
+                        />
+                        {errors.album && <p className="text-sm text-destructive">{errors.album}</p>}
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label htmlFor="duration">Duration (seconds)</Label>
+                        <Input
+                            id="duration"
+                            type="number"
+                            value={data.duration}
+                            onChange={(e) => setData('duration', e.target.value)}
+                            placeholder="180"
+                            min="0"
+                        />
+                        {errors.duration && <p className="text-sm text-destructive">{errors.duration}</p>}
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label htmlFor="url">URL</Label>
+                        <Input
+                            id="url"
+                            type="url"
+                            value={data.url}
+                            onChange={(e) => setData('url', e.target.value)}
+                            placeholder="https://youtube.com/watch?v=..."
+                        />
+                        {errors.url && <p className="text-sm text-destructive">{errors.url}</p>}
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label htmlFor="notes">Notes</Label>
+                        <Textarea
+                            id="notes"
+                            value={data.notes}
+                            onChange={(e) => setData('notes', e.target.value)}
+                            placeholder="Any notes about this song..."
+                            rows={3}
+                        />
+                        {errors.notes && <p className="text-sm text-destructive">{errors.notes}</p>}
+                    </div>
+
+                    <DialogFooter>
+                        <Button type="button" variant="outline" onClick={onClose} disabled={processing}>
+                            Cancel
+                        </Button>
+                        <Button type="submit" disabled={processing}>
+                            {processing ? 'Adding...' : 'Add Song'}
+                        </Button>
+                    </DialogFooter>
+                </form>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+function DeleteSongDialog({ song, playlistId, isOpen, onClose }: DeleteSongDialogProps) {
+    const { delete: destroy, processing } = useForm();
+
+    const handleDelete = () => {
+        destroy(`/playlists/${playlistId}/songs/${song.id}`, {
+            onSuccess: () => {
+                onClose();
+            },
+        });
+    };
+
+    return (
+        <Dialog open={isOpen} onOpenChange={onClose}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Remove Song</DialogTitle>
+                    <DialogDescription>
+                        Are you sure you want to remove "{song.title}" by {song.artist} from this playlist?
+                    </DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                    <Button variant="outline" onClick={onClose} disabled={processing}>
+                        Cancel
+                    </Button>
+                    <Button variant="destructive" onClick={handleDelete} disabled={processing}>
+                        {processing ? 'Removing...' : 'Remove Song'}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
 export default function PlaylistShow({ playlist }: PlaylistShowProps) {
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+    const [addSongDialogOpen, setAddSongDialogOpen] = useState(false);
+    const [deleteSongDialogOpen, setDeleteSongDialogOpen] = useState(false);
+    const [songToDelete, setSongToDelete] = useState<Song | null>(null);
 
     const breadcrumbs: BreadcrumbItem[] = [
         {
@@ -89,6 +277,30 @@ export default function PlaylistShow({ playlist }: PlaylistShowProps) {
         setDeleteDialogOpen(false);
     };
 
+    const handleAddSongClick = () => {
+        setAddSongDialogOpen(true);
+    };
+
+    const handleAddSongDialogClose = () => {
+        setAddSongDialogOpen(false);
+    };
+
+    const handleDeleteSongClick = (song: Song) => {
+        setSongToDelete(song);
+        setDeleteSongDialogOpen(true);
+    };
+
+    const handleDeleteSongDialogClose = () => {
+        setDeleteSongDialogOpen(false);
+        setSongToDelete(null);
+    };
+
+    const formatDuration = (seconds: number) => {
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
+    };
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title={playlist.name} />
@@ -104,6 +316,10 @@ export default function PlaylistShow({ playlist }: PlaylistShowProps) {
                         </Link>
                     </div>
                     <div className="flex items-center gap-2">
+                        <Button variant="outline" size="sm" onClick={handleAddSongClick}>
+                            <Plus className="mr-2 h-4 w-4" />
+                            Add Song
+                        </Button>
                         <Button variant="outline" size="sm">
                             <Edit className="mr-2 h-4 w-4" />
                             Edit
@@ -164,24 +380,103 @@ export default function PlaylistShow({ playlist }: PlaylistShowProps) {
                         </div>
                     </div>
 
-                    {/* Content Section */}
+                    {/* Songs Section */}
                     <div className="space-y-4">
-                        <h2 className="text-xl font-semibold">Content</h2>
-                        <div className="rounded-lg border p-8 text-center">
-                            <p className="text-muted-foreground">No content added yet</p>
-                            <p className="mt-1 text-sm text-muted-foreground">
-                                Add songs, videos, or other content to your playlist
-                            </p>
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-xl font-semibold">Songs ({playlist.songs.length})</h2>
+                            <Button variant="outline" size="sm" onClick={handleAddSongClick}>
+                                <Plus className="mr-2 h-4 w-4" />
+                                Add Song
+                            </Button>
                         </div>
+                        
+                        {playlist.songs.length === 0 ? (
+                            <div className="rounded-lg border p-8 text-center">
+                                <Music className="mx-auto h-12 w-12 text-muted-foreground" />
+                                <p className="mt-4 text-muted-foreground">No songs added yet</p>
+                                <p className="mt-1 text-sm text-muted-foreground">
+                                    Add your first song to get started
+                                </p>
+                                <Button className="mt-4" onClick={handleAddSongClick}>
+                                    <Plus className="mr-2 h-4 w-4" />
+                                    Add Your First Song
+                                </Button>
+                            </div>
+                        ) : (
+                            <div className="space-y-2">
+                                {playlist.songs.map((song, index) => (
+                                    <div key={song.id} className="flex items-center gap-4 rounded-lg border p-4 hover:bg-muted/50 transition-colors">
+                                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-sm font-medium">
+                                            {index + 1}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2">
+                                                <h3 className="font-medium truncate">{song.title}</h3>
+                                                {song.url && (
+                                                    <a 
+                                                        href={song.url} 
+                                                        target="_blank" 
+                                                        rel="noopener noreferrer"
+                                                        className="text-muted-foreground hover:text-foreground"
+                                                    >
+                                                        <ExternalLink className="h-4 w-4" />
+                                                    </a>
+                                                )}
+                                            </div>
+                                            <p className="text-sm text-muted-foreground truncate">
+                                                {song.artist}
+                                                {song.album && ` • ${song.album}`}
+                                            </p>
+                                            {song.notes && (
+                                                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                                                    {song.notes}
+                                                </p>
+                                            )}
+                                        </div>
+                                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                            {song.duration && (
+                                                <div className="flex items-center gap-1">
+                                                    <Clock className="h-4 w-4" />
+                                                    {formatDuration(song.duration)}
+                                                </div>
+                                            )}
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-8 w-8 p-0"
+                                                onClick={() => handleDeleteSongClick(song)}
+                                            >
+                                                <Trash2 className="h-4 w-4 text-destructive" />
+                                            </Button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
 
-                {/* Delete Dialog */}
+                {/* Dialogs */}
                 <DeletePlaylistDialog
                     playlist={playlist}
                     isOpen={deleteDialogOpen}
                     onClose={handleDeleteDialogClose}
                 />
+                
+                <AddSongDialog
+                    playlist={playlist}
+                    isOpen={addSongDialogOpen}
+                    onClose={handleAddSongDialogClose}
+                />
+                
+                {songToDelete && (
+                    <DeleteSongDialog
+                        song={songToDelete}
+                        playlistId={playlist.id}
+                        isOpen={deleteSongDialogOpen}
+                        onClose={handleDeleteSongDialogClose}
+                    />
+                )}
             </div>
         </AppLayout>
     );

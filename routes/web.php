@@ -14,6 +14,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     })->name('dashboard');
     
     Route::resource('playlists', PlaylistController::class);
+    
+    // Song routes nested under playlists
+    Route::post('playlists/{playlist}/songs', [App\Http\Controllers\SongController::class, 'store'])->name('songs.store');
+    Route::put('playlists/{playlist}/songs/{song}', [App\Http\Controllers\SongController::class, 'update'])->name('songs.update');
+    Route::delete('playlists/{playlist}/songs/{song}', [App\Http\Controllers\SongController::class, 'destroy'])->name('songs.destroy');
+    Route::post('playlists/{playlist}/songs/reorder', [App\Http\Controllers\SongController::class, 'reorder'])->name('songs.reorder');
 });
 
 require __DIR__.'/settings.php';

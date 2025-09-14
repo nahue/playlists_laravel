@@ -55,8 +55,8 @@ class PlaylistController extends Controller
             abort(403, 'Unauthorized action.');
         }
 
-        // Load the user relationship
-        $playlist->load('user');
+        // Load the user and songs relationships
+        $playlist->load(['user', 'songs']);
 
         return Inertia::render('playlists/show', [
             'playlist' => $playlist,
