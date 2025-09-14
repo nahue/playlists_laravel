@@ -24,6 +24,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Spotify metadata route
     Route::post('songs/spotify-metadata', [App\Http\Controllers\SongController::class, 'fetchSpotifyMetadata'])->name('songs.spotify-metadata');
     
+    // YouTube search route
+    Route::post('songs/youtube-search', [App\Http\Controllers\SongController::class, 'searchYouTube'])->name('songs.youtube-search');
+    
     // Spotify import route
     Route::post('playlists/{playlist}/import-spotify', [App\Http\Controllers\SongController::class, 'importSpotifyContent'])->name('playlists.import-spotify');
 });

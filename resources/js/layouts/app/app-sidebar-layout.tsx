@@ -30,16 +30,22 @@ function AppLayoutWithPlayer({ children, breadcrumbs = [] }: PropsWithChildren<{
                 onPrevious={audioPlayer.previous}
                 onSeek={audioPlayer.seek}
                 onVolumeChange={audioPlayer.setVolume}
-                onSongSelect={audioPlayer.play}
+                playerRef={audioPlayer.playerRef}
+                playerReady={audioPlayer.playerReady}
+                onReady={audioPlayer.onReady}
+                onStart={audioPlayer.onStart}
+                onPlayEvent={audioPlayer.onPlay}
+                onPauseEvent={audioPlayer.onPause}
+                onProgress={audioPlayer.onProgress}
+                onTimeUpdate={audioPlayer.onTimeUpdate}
+                onDurationChange={audioPlayer.onDurationChange}
+                onEnded={audioPlayer.onEnded}
+                onError={audioPlayer.onError}
             />
         </AppShell>
     );
 }
 
 export default function AppSidebarLayout({ children, breadcrumbs = [] }: PropsWithChildren<{ breadcrumbs?: BreadcrumbItem[] }>) {
-    return (
-        <AppLayoutWithPlayer breadcrumbs={breadcrumbs}>
-            {children}
-        </AppLayoutWithPlayer>
-    );
+    return <AppLayoutWithPlayer breadcrumbs={breadcrumbs}>{children}</AppLayoutWithPlayer>;
 }

@@ -162,6 +162,102 @@ class SongController extends Controller
     }
 
     /**
+     * Search YouTube for videos
+     */
+    public function searchYouTube(Request $request)
+    {
+        $request->validate([
+            'query' => 'required|string|max:255',
+        ]);
+
+        $apiKey = config('services.youtube.api_key');
+        
+        if (!$apiKey) {
+            return response()->json([
+                'error' => 'YouTube API key not configured'
+            ], 500);
+        }
+
+        $query = $request->input('query');
+        $url = "https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=10&q=" . urlencode($query) . "&key=" . $apiKey;
+
+        try {
+            $response = file_get_contents($url);
+            $data = json_decode($response, true);
+
+            if (isset($data['error'])) {
+                Log::error('YouTube API error', ['error' => $data['error']]);
+                return response()->json([
+                    'error' => 'YouTube API error: ' . $data['error']['message']
+                ], 400);
+            }
+
+            return response()->json($data);
+        } catch (\Exception $e) {
+            Log::error('YouTube search error', ['error' => $e->getMessage()]);
+            return response()->json([
+                'error' => 'Failed to search YouTube'
+            ], 500);
+        }
+    }
+
+    /**
+     * Search YouTube for a specific song and return the first result's URL
+     */
+    private function searchYouTubeForSong($title, $artist)
+    {
+        $apiKey = config('services.youtube.api_key');
+        
+        if (!$apiKey) {
+            Log::warning('YouTube API key not configured, skipping YouTube search');
+            return null;
+        }
+
+        $query = $title . ' ' . $artist;
+        $url = "https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=1&q=" . urlencode($query) . "&key=" . $apiKey;
+
+        try {
+            $response = file_get_contents($url);
+            $data = json_decode($response, true);
+
+            if (isset($data['error'])) {
+                Log::warning('YouTube API error during import', [
+                    'error' => $data['error'],
+                    'query' => $query
+                ]);
+                return null;
+            }
+
+            if (isset($data['items']) && count($data['items']) > 0) {
+                $videoId = $data['items'][0]['id']['videoId'];
+                $youtubeUrl = "https://www.youtube.com/watch?v=" . $videoId;
+                
+                Log::info('Found YouTube video for song', [
+                    'title' => $title,
+                    'artist' => $artist,
+                    'youtube_url' => $youtubeUrl
+                ]);
+                
+                return $youtubeUrl;
+            }
+
+            Log::info('No YouTube results found for song', [
+                'title' => $title,
+                'artist' => $artist,
+                'query' => $query
+            ]);
+            
+            return null;
+        } catch (\Exception $e) {
+            Log::error('YouTube search error during import', [
+                'error' => $e->getMessage(),
+                'query' => $query
+            ]);
+            return null;
+        }
+    }
+
+    /**
      * Import Spotify album or playlist and override the current playlist
      */
     public function importSpotifyContent(Request $request, Playlist $playlist)
@@ -204,29 +300,42 @@ class SongController extends Controller
             'description' => $metadata['description'],
         ]);
 
-        // Add all tracks
+        // Add all tracks with YouTube search
         foreach ($metadata['tracks'] as $index => $trackData) {
+            // Search YouTube for this song
+            $youtubeUrl = $this->searchYouTubeForSong($trackData['title'], $trackData['artist']);
+            
             $playlist->songs()->create([
                 'title' => $trackData['title'],
                 'artist' => $trackData['artist'],
                 'album' => $trackData['album'],
                 'duration' => $trackData['duration'],
-                'url' => $trackData['url'],
+                'url' => $youtubeUrl ?: $trackData['url'], // Use YouTube URL if found, otherwise fallback
                 'spotify_url' => $trackData['spotify_url'],
                 'order' => $index + 1,
             ]);
         }
 
+        // Count how many songs got YouTube URLs
+        $youtubeCount = $playlist->songs()->whereNotNull('url')->where('url', 'like', '%youtube.com%')->count();
+        
         Log::info('Successfully imported Spotify content', [
             'playlist_id' => $playlist->id,
             'tracks_count' => count($metadata['tracks']),
+            'youtube_urls_found' => $youtubeCount,
             'source_url' => $request->spotify_url
         ]);
 
+        $message = "Successfully imported {$metadata['name']} with " . count($metadata['tracks']) . " tracks";
+        if ($youtubeCount > 0) {
+            $message .= " ({$youtubeCount} with YouTube URLs)";
+        }
+
         return response()->json([
             'success' => true,
-            'message' => "Successfully imported {$metadata['name']} with " . count($metadata['tracks']) . " tracks",
-            'tracks_count' => count($metadata['tracks'])
+            'message' => $message,
+            'tracks_count' => count($metadata['tracks']),
+            'youtube_urls_found' => $youtubeCount
         ]);
     }
 }

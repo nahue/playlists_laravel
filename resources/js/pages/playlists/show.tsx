@@ -69,6 +69,13 @@ interface ImportSpotifyDialogProps {
     onClose: () => void;
 }
 
+interface EditSongDialogProps {
+    song: Song;
+    playlist: Playlist;
+    isOpen: boolean;
+    onClose: () => void;
+}
+
 function DeletePlaylistDialog({ playlist, isOpen, onClose }: DeletePlaylistDialogProps) {
     const { delete: destroy, processing } = useForm();
 
@@ -115,6 +122,51 @@ function AddSongDialog({ playlist, isOpen, onClose }: AddSongDialogProps) {
     });
 
     const [isLoadingMetadata, setIsLoadingMetadata] = useState(false);
+    const [isSearchingYouTube, setIsSearchingYouTube] = useState(false);
+    const [youtubeResults, setYoutubeResults] = useState<any[]>([]);
+    const [showYoutubeResults, setShowYoutubeResults] = useState(false);
+
+    const searchYouTube = async (query: string) => {
+        if (!query.trim()) return;
+
+        setIsSearchingYouTube(true);
+        setYoutubeResults([]);
+        setShowYoutubeResults(true);
+
+        try {
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
+            const response = await fetch('/songs/youtube-search', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken || '',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    Accept: 'application/json',
+                },
+                body: JSON.stringify({ query }),
+            });
+
+            if (response.ok) {
+                const results = await response.json();
+                setYoutubeResults(results.items || []);
+            } else {
+                console.error('Failed to search YouTube:', response.status);
+                setYoutubeResults([]);
+            }
+        } catch (error) {
+            console.error('Error searching YouTube:', error);
+            setYoutubeResults([]);
+        } finally {
+            setIsSearchingYouTube(false);
+        }
+    };
+
+    const selectYouTubeResult = (video: any) => {
+        setData('url', `https://www.youtube.com/watch?v=${video.id.videoId}`);
+        setShowYoutubeResults(false);
+        setYoutubeResults([]);
+    };
 
     const fetchSpotifyMetadata = async (spotifyUrl: string) => {
         if (!spotifyUrl.trim()) return;
@@ -150,7 +202,6 @@ function AddSongDialog({ playlist, isOpen, onClose }: AddSongDialogProps) {
                     artist: metadata.artist || data.artist,
                     album: metadata.album || data.album,
                     duration: metadata.duration || data.duration,
-                    url: metadata.url || data.url,
                     spotify_url: spotifyUrl,
                 });
             } else {
@@ -262,6 +313,68 @@ function AddSongDialog({ playlist, isOpen, onClose }: AddSongDialogProps) {
                     </div>
 
                     <div className="space-y-2">
+                        <Label htmlFor="youtube_search">Search YouTube</Label>
+                        <div className="flex gap-2">
+                            <Input
+                                id="youtube_search"
+                                placeholder="Search for song on YouTube..."
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        const query = `${data.title} ${data.artist}`.trim();
+                                        if (query) {
+                                            searchYouTube(query);
+                                        }
+                                    }
+                                }}
+                            />
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                    const query = `${data.title} ${data.artist}`.trim();
+                                    if (query) {
+                                        searchYouTube(query);
+                                    }
+                                }}
+                                disabled={isSearchingYouTube || (!data.title && !data.artist)}
+                            >
+                                {isSearchingYouTube ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Search'}
+                            </Button>
+                        </div>
+                        <p className="text-xs text-muted-foreground">Search YouTube for the song and auto-fill the URL</p>
+
+                        {showYoutubeResults && (
+                            <div className="max-h-48 overflow-y-auto rounded border bg-muted/50 p-2">
+                                {youtubeResults.length > 0 ? (
+                                    <div className="space-y-2">
+                                        {youtubeResults.slice(0, 5).map((video) => (
+                                            <div
+                                                key={video.id.videoId}
+                                                className="flex cursor-pointer items-center gap-3 rounded p-2 transition-colors hover:bg-muted"
+                                                onClick={() => selectYouTubeResult(video)}
+                                            >
+                                                <img
+                                                    src={video.snippet.thumbnails.default.url}
+                                                    alt={video.snippet.title}
+                                                    className="h-12 w-16 rounded object-cover"
+                                                />
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="truncate text-sm font-medium">{video.snippet.title}</p>
+                                                    <p className="truncate text-xs text-muted-foreground">{video.snippet.channelTitle}</p>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="py-4 text-center text-sm text-muted-foreground">No results found</p>
+                                )}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="space-y-2">
                         <Label htmlFor="notes">Notes</Label>
                         <Textarea
                             id="notes"
@@ -353,6 +466,14 @@ function ImportSpotifyDialog({ playlist, isOpen, onClose }: ImportSpotifyDialogP
                 console.log('Import successful:', result);
                 setSpotifyUrl('');
                 onClose();
+
+                // Show success message with YouTube URL count
+                if (result.youtube_urls_found > 0) {
+                    alert(`Import successful! ${result.message}`);
+                } else {
+                    alert(`Import successful! ${result.message} (No YouTube URLs found - you can search for them manually)`);
+                }
+
                 // Refresh the page to show the imported content
                 window.location.reload();
             } else {
@@ -414,12 +535,204 @@ function ImportSpotifyDialog({ playlist, isOpen, onClose }: ImportSpotifyDialogP
     );
 }
 
+function EditSongDialog({ song, playlist, isOpen, onClose }: EditSongDialogProps) {
+    const { data, setData, put, processing, errors, reset } = useForm({
+        title: song.title,
+        artist: song.artist,
+        album: song.album || '',
+        duration: song.duration?.toString() || '',
+        url: song.url || '',
+        spotify_url: song.spotify_url || '',
+        notes: song.notes || '',
+    });
+
+    const [isLoadingMetadata, setIsLoadingMetadata] = useState(false);
+
+    const fetchSpotifyMetadata = async (spotifyUrl: string) => {
+        if (!spotifyUrl.trim()) return;
+
+        setIsLoadingMetadata(true);
+        try {
+            // Get CSRF token from meta tag
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
+            console.log('CSRF Token:', csrfToken ? 'Found' : 'Not found');
+            console.log('Spotify URL:', spotifyUrl);
+
+            const response = await fetch('/songs/spotify-metadata', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken || '',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    Accept: 'application/json',
+                },
+                body: JSON.stringify({ spotify_url: spotifyUrl }),
+            });
+
+            console.log('Response status:', response.status);
+            console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+
+            if (response.ok) {
+                const metadata = await response.json();
+                console.log('Metadata received:', metadata);
+                setData({
+                    ...data,
+                    title: metadata.title || data.title,
+                    artist: metadata.artist || data.artist,
+                    album: metadata.album || data.album,
+                    duration: metadata.duration || data.duration,
+                    spotify_url: spotifyUrl,
+                });
+            } else {
+                const errorText = await response.text();
+                console.error('Failed to fetch Spotify metadata:', response.status, errorText);
+                try {
+                    const error = JSON.parse(errorText);
+                    console.error('Parsed error:', error);
+                } catch (e) {
+                    console.error('Could not parse error response as JSON', e);
+                }
+            }
+        } catch (error) {
+            console.error('Error fetching Spotify metadata:', error);
+        } finally {
+            setIsLoadingMetadata(false);
+        }
+    };
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        put(`/playlists/${playlist.id}/songs/${song.id}`, {
+            onSuccess: () => {
+                onClose();
+            },
+        });
+    };
+
+    return (
+        <Dialog open={isOpen} onOpenChange={onClose}>
+            <DialogContent className="max-w-md">
+                <DialogHeader>
+                    <DialogTitle>Edit Song</DialogTitle>
+                    <DialogDescription>
+                        Edit "{song.title}" in "{playlist.name}"
+                    </DialogDescription>
+                </DialogHeader>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <div className="space-y-2">
+                        <Label htmlFor="edit_title">Title *</Label>
+                        <Input
+                            id="edit_title"
+                            value={data.title}
+                            onChange={(e) => setData('title', e.target.value)}
+                            placeholder="Song title"
+                            required
+                        />
+                        {errors.title && <p className="text-sm text-destructive">{errors.title}</p>}
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label htmlFor="edit_artist">Artist *</Label>
+                        <Input
+                            id="edit_artist"
+                            value={data.artist}
+                            onChange={(e) => setData('artist', e.target.value)}
+                            placeholder="Artist name"
+                            required
+                        />
+                        {errors.artist && <p className="text-sm text-destructive">{errors.artist}</p>}
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label htmlFor="edit_album">Album</Label>
+                        <Input id="edit_album" value={data.album} onChange={(e) => setData('album', e.target.value)} placeholder="Album name" />
+                        {errors.album && <p className="text-sm text-destructive">{errors.album}</p>}
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label htmlFor="edit_duration">Duration (seconds)</Label>
+                        <Input
+                            id="edit_duration"
+                            type="number"
+                            value={data.duration}
+                            onChange={(e) => setData('duration', e.target.value)}
+                            placeholder="180"
+                            min="0"
+                        />
+                        {errors.duration && <p className="text-sm text-destructive">{errors.duration}</p>}
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label htmlFor="edit_spotify_url">Spotify URL</Label>
+                        <div className="flex gap-2">
+                            <Input
+                                id="edit_spotify_url"
+                                value={data.spotify_url}
+                                onChange={(e) => setData('spotify_url', e.target.value)}
+                                placeholder="https://open.spotify.com/track/..."
+                                className="flex-1"
+                            />
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => fetchSpotifyMetadata(data.spotify_url)}
+                                disabled={isLoadingMetadata || !data.spotify_url.trim()}
+                            >
+                                {isLoadingMetadata ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Load'}
+                            </Button>
+                        </div>
+                        <p className="text-xs text-muted-foreground">Paste a Spotify track URL to automatically fill in song details</p>
+                        {errors.spotify_url && <p className="text-sm text-destructive">{errors.spotify_url}</p>}
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label htmlFor="edit_url">Other URL</Label>
+                        <Input
+                            id="edit_url"
+                            type="url"
+                            value={data.url}
+                            onChange={(e) => setData('url', e.target.value)}
+                            placeholder="https://youtube.com/watch?v=..."
+                        />
+                        {errors.url && <p className="text-sm text-destructive">{errors.url}</p>}
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label htmlFor="edit_notes">Notes</Label>
+                        <Textarea
+                            id="edit_notes"
+                            value={data.notes}
+                            onChange={(e) => setData('notes', e.target.value)}
+                            placeholder="Any notes about this song..."
+                            rows={3}
+                        />
+                        {errors.notes && <p className="text-sm text-destructive">{errors.notes}</p>}
+                    </div>
+
+                    <DialogFooter>
+                        <Button type="button" variant="outline" onClick={onClose} disabled={processing}>
+                            Cancel
+                        </Button>
+                        <Button type="submit" disabled={processing}>
+                            {processing ? 'Saving...' : 'Save Changes'}
+                        </Button>
+                    </DialogFooter>
+                </form>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
 export default function PlaylistShow({ playlist }: PlaylistShowProps) {
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [addSongDialogOpen, setAddSongDialogOpen] = useState(false);
     const [deleteSongDialogOpen, setDeleteSongDialogOpen] = useState(false);
+    const [editSongDialogOpen, setEditSongDialogOpen] = useState(false);
     const [importSpotifyDialogOpen, setImportSpotifyDialogOpen] = useState(false);
     const [songToDelete, setSongToDelete] = useState<Song | null>(null);
+    const [songToEdit, setSongToEdit] = useState<Song | null>(null);
 
     const audioPlayer = useAudioPlayerContext();
 
@@ -465,6 +778,16 @@ export default function PlaylistShow({ playlist }: PlaylistShowProps) {
     const handleDeleteSongDialogClose = () => {
         setDeleteSongDialogOpen(false);
         setSongToDelete(null);
+    };
+
+    const handleEditSongClick = (song: Song) => {
+        setSongToEdit(song);
+        setEditSongDialogOpen(true);
+    };
+
+    const handleEditSongDialogClose = () => {
+        setEditSongDialogOpen(false);
+        setSongToEdit(null);
     };
 
     const formatDuration = (seconds: number) => {
@@ -641,19 +964,23 @@ export default function PlaylistShow({ playlist }: PlaylistShowProps) {
                                                     size="sm"
                                                     className="h-8 w-8 p-0"
                                                     onClick={() => {
-                                                        // Check if it's a Spotify URL that can't be played directly
-                                                        const isSpotifyUrl =
-                                                            song.spotify_url &&
-                                                            (song.spotify_url.includes('open.spotify.com') || song.spotify_url.includes('spotify:'));
-                                                        const hasDirectUrl = song.url && !song.url.includes('open.spotify.com');
+                                                        console.log('Playing song:', song);
+                                                        // Try to play with audio player
+                                                        audioPlayer?.play(song);
 
-                                                        if (isSpotifyUrl && !hasDirectUrl) {
-                                                            // Open Spotify URL directly
-                                                            window.open(song.spotify_url, '_blank');
-                                                        } else {
-                                                            // Try to play with audio player
-                                                            audioPlayer?.play(song);
-                                                        }
+                                                        // // Check if it's a Spotify URL that can't be played directly
+                                                        // const isSpotifyUrl =
+                                                        //     song.spotify_url &&
+                                                        //     (song.spotify_url.includes('open.spotify.com') || song.spotify_url.includes('spotify:'));
+                                                        // const hasDirectUrl = song.url && !song.url.includes('open.spotify.com');
+
+                                                        // if (isSpotifyUrl && !hasDirectUrl) {
+                                                        //     // Open Spotify URL directly
+                                                        //     window.open(song.spotify_url, '_blank');
+                                                        // } else {
+                                                        //     // Try to play with audio player
+                                                        //     audioPlayer?.play(song);
+                                                        // }
                                                     }}
                                                     disabled={!song.url && !song.spotify_url}
                                                     title={
@@ -666,7 +993,22 @@ export default function PlaylistShow({ playlist }: PlaylistShowProps) {
                                                 >
                                                     {isCurrentSong && isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
                                                 </Button>
-                                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => handleDeleteSongClick(song)}>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="h-8 w-8 p-0"
+                                                    onClick={() => handleEditSongClick(song)}
+                                                    title="Edit song"
+                                                >
+                                                    <Edit className="h-4 w-4" />
+                                                </Button>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="h-8 w-8 p-0"
+                                                    onClick={() => handleDeleteSongClick(song)}
+                                                    title="Delete song"
+                                                >
                                                     <Trash2 className="h-4 w-4 text-destructive" />
                                                 </Button>
                                             </div>
@@ -690,6 +1032,10 @@ export default function PlaylistShow({ playlist }: PlaylistShowProps) {
                         isOpen={deleteSongDialogOpen}
                         onClose={handleDeleteSongDialogClose}
                     />
+                )}
+
+                {songToEdit && (
+                    <EditSongDialog song={songToEdit} playlist={playlist} isOpen={editSongDialogOpen} onClose={handleEditSongDialogClose} />
                 )}
 
                 <ImportSpotifyDialog playlist={playlist} isOpen={importSpotifyDialogOpen} onClose={() => setImportSpotifyDialogOpen(false)} />

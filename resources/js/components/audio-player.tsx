@@ -2,7 +2,9 @@ import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ExternalLink, Pause, Play, SkipBack, SkipForward, Volume2, VolumeX } from 'lucide-react';
-import { useState } from 'react';
+import React, { useState } from 'react';
+import ReactPlayer from 'react-player';
+import Duration from './duration';
 
 interface Song {
     id: number;
@@ -31,7 +33,17 @@ interface AudioPlayerProps {
     onPrevious: () => void;
     onSeek: (time: number) => void;
     onVolumeChange: (volume: number) => void;
-    onSongSelect: (song: Song) => void;
+    playerRef: React.RefObject<any>;
+    playerReady: boolean;
+    onReady: () => void;
+    onStart: () => void;
+    onPlayEvent: () => void;
+    onPauseEvent: () => void;
+    onProgress: (state: any) => void;
+    onTimeUpdate: (event: any) => void;
+    onDurationChange: (event: any) => void;
+    onEnded: () => void;
+    onError: (error: any) => void;
 }
 
 export function AudioPlayer({
@@ -47,11 +59,27 @@ export function AudioPlayer({
     onPrevious,
     onSeek,
     onVolumeChange,
+    playerRef,
+    playerReady,
+    onReady,
+    onStart,
+    onPlayEvent,
+    onPauseEvent,
+    onProgress,
+    onTimeUpdate,
+    onDurationChange,
+    onEnded,
+    onError,
 }: AudioPlayerProps) {
     const [isMuted, setIsMuted] = useState(false);
     const [previousVolume, setPreviousVolume] = useState(1);
 
     const formatTime = (seconds: number) => {
+        // Handle invalid time values
+        if (typeof seconds !== 'number' || isNaN(seconds) || !isFinite(seconds)) {
+            return '0:00';
+        }
+
         const mins = Math.floor(seconds / 60);
         const secs = Math.floor(seconds % 60);
         return `${mins}:${secs.toString().padStart(2, '0')}`;
@@ -69,7 +97,13 @@ export function AudioPlayer({
     };
 
     const handleSeek = (value: number[]) => {
-        onSeek(value[0]);
+        const seekTime = value[0];
+        // Validate the seek time before calling onSeek
+        if (typeof seekTime === 'number' && !isNaN(seekTime) && isFinite(seekTime) && seekTime >= 0) {
+            onSeek(seekTime);
+        } else {
+            console.warn('Invalid seek time from slider:', seekTime);
+        }
     };
 
     const handleVolumeSlider = (value: number[]) => {
@@ -89,6 +123,27 @@ export function AudioPlayer({
 
     return (
         <TooltipProvider>
+            {/* Hidden ReactPlayer for audio playback */}
+            <ReactPlayer
+                ref={playerRef}
+                src={currentSong.url}
+                playing={isPlaying}
+                volume={volume}
+                muted={false}
+                onReady={onReady}
+                onStart={onStart}
+                onPlay={onPlayEvent}
+                onPause={onPauseEvent}
+                onProgress={onProgress}
+                onTimeUpdate={onTimeUpdate}
+                onDurationChange={onDurationChange}
+                onEnded={onEnded}
+                onError={onError}
+                style={{ display: 'none' }}
+                width="0"
+                height="0"
+            />
+
             <div className="fixed right-0 bottom-0 left-0 z-50 border-t border-border bg-background">
                 <div className="flex items-center justify-between px-4 py-3">
                     {/* Song Info */}
@@ -163,8 +218,16 @@ export function AudioPlayer({
 
                         {/* Progress Bar */}
                         <div className="flex w-full items-center gap-2">
-                            <span className="w-10 text-right text-xs text-muted-foreground">{formatTime(currentTime)}</span>
-                            <Slider value={[currentTime]} max={duration || 100} step={1} onValueChange={handleSeek} className="flex-1" />
+                            <span className="w-10 text-right text-xs text-muted-foreground">
+                                <Duration seconds={currentTime} />
+                            </span>
+                            <Slider
+                                value={[isNaN(currentTime) ? 0 : currentTime]}
+                                max={isNaN(duration) || duration <= 0 ? 100 : duration}
+                                step={1}
+                                onValueChange={handleSeek}
+                                className="flex-1"
+                            />
                             <span className="w-10 text-xs text-muted-foreground">{formatTime(duration)}</span>
                         </div>
                     </div>

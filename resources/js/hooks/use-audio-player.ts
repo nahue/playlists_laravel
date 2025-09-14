@@ -30,147 +30,160 @@ interface UseAudioPlayerReturn {
     setVolume: (volume: number) => void;
     setPlaylist: (songs: Song[]) => void;
     togglePlayPause: () => void;
+    playerRef: React.RefObject<any>;
+    playerReady: boolean;
+    onReady: () => void;
+    onStart: () => void;
+    onPlay: () => void;
+    onPause: () => void;
+    onProgress: (state: any) => void;
+    onTimeUpdate: (event: any) => void;
+    onDurationChange: (event: any) => void;
+    onEnded: () => void;
+    onError: (error: any) => void;
 }
 
 export function useAudioPlayer(): UseAudioPlayerReturn {
-    const audioRef = useRef<HTMLAudioElement | null>(null);
+    const playerRef = useRef<any>(null);
     const [currentSong, setCurrentSong] = useState<Song | null>(null);
     const [isPlaying, setIsPlaying] = useState(false);
     const [currentTime, setCurrentTime] = useState(0);
     const [duration, setDuration] = useState(0);
     const [volume, setVolumeState] = useState(1);
     const [playlist, setPlaylist] = useState<Song[]>([]);
+    const [playerReady, setPlayerReady] = useState(false);
 
-    // Initialize audio element
-    useEffect(() => {
-        if (!audioRef.current) {
-            audioRef.current = new Audio();
-            audioRef.current.preload = 'metadata';
-            audioRef.current.crossOrigin = 'anonymous';
+    // ReactPlayer event handlers
+    const handleReady = useCallback(() => {
+        console.log('ReactPlayer ready');
+        setPlayerReady(true);
+    }, []);
+
+    const handleStart = useCallback(() => {
+        setIsPlaying(true);
+    }, []);
+
+    const handlePlay = useCallback(() => {
+        setIsPlaying(true);
+    }, []);
+
+    const handlePause = useCallback(() => {
+        setIsPlaying(false);
+    }, []);
+
+    const handleProgress = useCallback((state: any) => {
+        // // Try different possible properties for the played time
+        // let playedSeconds = state?.timeStamp;
+        // // If we got timeStamp (which appears to be in milliseconds), convert to seconds
+        // if (state?.timeStamp && typeof state.timeStamp === 'number') {
+        //     playedSeconds = state.timeStamp / 1000;
+        // }
+        // // Validate that playedSeconds is a valid number
+        // if (typeof playedSeconds === 'number' && !isNaN(playedSeconds) && isFinite(playedSeconds)) {
+        //     setCurrentTime(playedSeconds);
+        // } else {
+        //     console.warn('Invalid playedSeconds value:', playedSeconds);
+        // }
+    }, []);
+
+    const handleTimeUpdate = useCallback(
+        (event: any) => {
+            const player = playerRef.current;
+
+            // We only want to update time slider if we are not currently seeking
+            // if (!player || state.seeking) return;
+            if (!player.duration) return;
+
+            setCurrentTime(player.currentTime);
+        },
+        [setCurrentTime, playerRef],
+    );
+
+    const handleDurationChange = useCallback((event: any) => {
+        // Extract duration from the event target
+        const duration = event.target?.duration || 0;
+        // Validate that duration is a valid number
+        if (typeof duration === 'number' && !isNaN(duration) && isFinite(duration) && duration > 0) {
+            setDuration(duration);
+        } else {
+            console.warn('Invalid duration value:', duration);
         }
+    }, []);
 
-        const audio = audioRef.current;
+    const handleEnded = useCallback(() => {
+        setIsPlaying(false);
+        setCurrentTime(0);
 
-        const handleTimeUpdate = () => {
-            setCurrentTime(audio.currentTime);
-        };
-
-        const handleDurationChange = () => {
-            setDuration(audio.duration || 0);
-        };
-
-        const handleEnded = () => {
-            setIsPlaying(false);
+        // Auto-play next song if available
+        const currentIndex = playlist.findIndex((song) => song.id === currentSong?.id);
+        if (currentIndex !== -1 && currentIndex < playlist.length - 1) {
+            const nextSong = playlist[currentIndex + 1];
+            setCurrentSong(nextSong);
             setCurrentTime(0);
-            // Auto-play next song if available
-            const currentIndex = playlist.findIndex((song) => song.id === currentSong?.id);
-            if (currentIndex !== -1 && currentIndex < playlist.length - 1) {
-                const nextSong = playlist[currentIndex + 1];
-                play(nextSong);
-            }
-        };
-
-        const handleLoadStart = () => {
-            setCurrentTime(0);
-        };
-
-        const handleCanPlay = () => {
-            // Audio is ready to play
-        };
-
-        const handleError = (e: Event) => {
-            console.error('Audio error:', e);
-            setIsPlaying(false);
-        };
-
-        audio.addEventListener('timeupdate', handleTimeUpdate);
-        audio.addEventListener('durationchange', handleDurationChange);
-        audio.addEventListener('ended', handleEnded);
-        audio.addEventListener('loadstart', handleLoadStart);
-        audio.addEventListener('canplay', handleCanPlay);
-        audio.addEventListener('error', handleError);
-
-        return () => {
-            audio.removeEventListener('timeupdate', handleTimeUpdate);
-            audio.removeEventListener('durationchange', handleDurationChange);
-            audio.removeEventListener('ended', handleEnded);
-            audio.removeEventListener('loadstart', handleLoadStart);
-            audio.removeEventListener('canplay', handleCanPlay);
-            audio.removeEventListener('error', handleError);
-        };
+            // The player will automatically start playing the new song
+        }
     }, [currentSong, playlist]);
+
+    const handleError = useCallback(
+        (error: any) => {
+            console.error('ReactPlayer error:', error);
+            console.error('Error details:', {
+                error,
+                currentSong,
+                playerReady,
+                playerRef: playerRef.current,
+            });
+            console.error('This error might prevent progress updates from working');
+            setIsPlaying(false);
+        },
+        [currentSong, playerReady],
+    );
+
+    // Expose event handlers for the AudioPlayer component
+    const playerEventHandlers = {
+        onReady: handleReady,
+        onStart: handleStart,
+        onPlay: handlePlay,
+        onPause: handlePause,
+        onProgress: handleProgress,
+        onTimeUpdate: handleTimeUpdate,
+        onDurationChange: handleDurationChange,
+        onEnded: handleEnded,
+        onError: handleError,
+    };
 
     const play = useCallback(
         (song: Song) => {
-            if (!audioRef.current) return;
-
-            const audio = audioRef.current;
+            console.log('Play function called with song:', song);
+            console.log('Player ref current:', playerRef.current);
+            console.log('Player ready:', playerReady);
 
             // If it's the same song and it's paused, just resume
             if (currentSong?.id === song.id && !isPlaying) {
-                audio
-                    .play()
-                    .then(() => {
-                        setIsPlaying(true);
-                    })
-                    .catch(console.error);
+                console.log('Resuming same song');
+                setIsPlaying(true);
                 return;
             }
 
             // Load new song
+            console.log('Loading new song:', song.title);
             setCurrentSong(song);
             setCurrentTime(0);
+            setIsPlaying(true);
 
-            // Check if it's a Spotify URL (which can't be played directly)
-            const isSpotifyUrl = song.spotify_url && (song.spotify_url.includes('open.spotify.com') || song.spotify_url.includes('spotify:'));
-
-            // Try to use the song's direct URL first, avoid Spotify URLs
-            const audioUrl = song.url && !song.url.includes('open.spotify.com') ? song.url : null;
-
-            if (audioUrl) {
-                audio.src = audioUrl;
-                audio.load();
-                audio
-                    .play()
-                    .then(() => {
-                        setIsPlaying(true);
-                    })
-                    .catch((error) => {
-                        console.error('Error playing audio:', error);
-                        setIsPlaying(false);
-                        // If direct URL fails and we have a Spotify URL, show a message
-                        if (song.spotify_url) {
-                            alert(`Cannot play "${song.title}" directly. Please open the Spotify link to listen.`);
-                        }
-                    });
-            } else if (isSpotifyUrl) {
-                // For Spotify URLs, show a message and open in new tab
-                alert(`"${song.title}" is a Spotify track. Opening in Spotify...`);
-                window.open(song.spotify_url, '_blank');
-                setIsPlaying(false);
-            } else {
-                console.warn('No playable audio URL available for song:', song.title);
-                setIsPlaying(false);
-            }
+            // Reset player ready state when loading new song
+            setPlayerReady(false);
         },
-        [currentSong, isPlaying],
+        [currentSong, isPlaying, playerReady],
     );
 
     const pause = useCallback(() => {
-        if (audioRef.current && isPlaying) {
-            audioRef.current.pause();
-            setIsPlaying(false);
-        }
-    }, [isPlaying]);
+        setIsPlaying(false);
+    }, []);
 
     const resume = useCallback(() => {
-        if (audioRef.current && !isPlaying) {
-            audioRef.current
-                .play()
-                .then(() => {
-                    setIsPlaying(true);
-                })
-                .catch(console.error);
+        if (playerRef.current && !isPlaying) {
+            setIsPlaying(true);
         }
     }, [isPlaying]);
 
@@ -180,9 +193,11 @@ export function useAudioPlayer(): UseAudioPlayerReturn {
         const currentIndex = playlist.findIndex((song) => song.id === currentSong.id);
         if (currentIndex !== -1 && currentIndex < playlist.length - 1) {
             const nextSong = playlist[currentIndex + 1];
-            play(nextSong);
+            setCurrentSong(nextSong);
+            setCurrentTime(0);
+            setIsPlaying(true);
         }
-    }, [currentSong, playlist, play]);
+    }, [currentSong, playlist]);
 
     const previous = useCallback(() => {
         if (!currentSong || playlist.length <= 1) return;
@@ -190,22 +205,80 @@ export function useAudioPlayer(): UseAudioPlayerReturn {
         const currentIndex = playlist.findIndex((song) => song.id === currentSong.id);
         if (currentIndex > 0) {
             const prevSong = playlist[currentIndex - 1];
-            play(prevSong);
+            setCurrentSong(prevSong);
+            setCurrentTime(0);
+            setIsPlaying(true);
         }
-    }, [currentSong, playlist, play]);
+    }, [currentSong, playlist]);
 
-    const seek = useCallback((time: number) => {
-        if (audioRef.current) {
-            audioRef.current.currentTime = time;
-            setCurrentTime(time);
-        }
-    }, []);
+    const seek = useCallback(
+        (time: number) => {
+            // Validate the time parameter
+            if (typeof time !== 'number' || isNaN(time) || !isFinite(time) || time < 0) {
+                console.warn('Invalid seek time:', time);
+                return;
+            }
+
+            console.log('Seek called with time:', time);
+            console.log('Player ref current:', playerRef.current);
+            console.log('Player ready:', playerReady);
+            console.log('Current song:', currentSong);
+            console.log('Is playing:', isPlaying);
+
+            // Try to seek even if playerReady is false, as the player might still work
+            if (playerRef.current) {
+                try {
+                    // Log available methods on the player ref
+                    console.log('Available methods on player ref:', Object.getOwnPropertyNames(playerRef.current));
+                    console.log('Player ref prototype:', Object.getOwnPropertyNames(Object.getPrototypeOf(playerRef.current)));
+
+                    // Try different possible method names and access patterns
+                    if (typeof playerRef.current.seekTo === 'function') {
+                        playerRef.current.seekTo(time, 'seconds');
+                        console.log('Called seekTo with time:', time);
+                    } else if (typeof playerRef.current.seek === 'function') {
+                        playerRef.current.seek(time);
+                        console.log('Called seek with time:', time);
+                    } else if (playerRef.current.getInternalPlayer && typeof playerRef.current.getInternalPlayer === 'function') {
+                        // ReactPlayer v3 might expose internal player
+                        const internalPlayer = playerRef.current.getInternalPlayer();
+                        console.log('Internal player:', internalPlayer);
+                        if (internalPlayer && typeof internalPlayer.currentTime !== 'undefined') {
+                            internalPlayer.currentTime = time;
+                            console.log('Set internal player currentTime to:', time);
+                        }
+                    } else if (typeof playerRef.current.currentTime !== 'undefined') {
+                        // Direct property access for HTML5 media elements
+                        playerRef.current.currentTime = time;
+                        console.log('Set currentTime directly to:', time);
+                    } else {
+                        console.warn('No seek method available on player ref');
+                        console.log('Player ref type:', typeof playerRef.current);
+                        console.log('Player ref constructor:', playerRef.current?.constructor?.name);
+                        // Try to find any seek-related methods
+                        const methods = Object.getOwnPropertyNames(playerRef.current).filter(
+                            (name) => name.toLowerCase().includes('seek') || name.toLowerCase().includes('time'),
+                        );
+                        console.log('Seek-related methods:', methods);
+                    }
+                } catch (error) {
+                    console.error('Error seeking:', error);
+                }
+            } else {
+                console.warn('Player ref not available');
+                console.log('playerRef.current is:', playerRef.current);
+                console.log('playerReady is:', playerReady);
+            }
+        },
+        [playerReady, currentSong, isPlaying],
+    );
 
     const setVolume = useCallback((newVolume: number) => {
-        if (audioRef.current) {
-            audioRef.current.volume = newVolume;
-            setVolumeState(newVolume);
-        }
+        setVolumeState(newVolume);
+    }, []);
+
+    const setPlaylistSongs = useCallback((songs: Song[]) => {
+        setPlaylist(songs);
     }, []);
 
     const togglePlayPause = useCallback(() => {
@@ -219,7 +292,7 @@ export function useAudioPlayer(): UseAudioPlayerReturn {
     // Keyboard shortcuts
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
-            // Only handle shortcuts when not typing in an input
+            // Only handle shortcuts when not typing in input fields
             if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
                 return;
             }
@@ -229,38 +302,40 @@ export function useAudioPlayer(): UseAudioPlayerReturn {
                     event.preventDefault();
                     togglePlayPause();
                     break;
-                case 'ArrowRight':
-                    event.preventDefault();
-                    if (event.shiftKey) {
-                        // Skip forward 10 seconds
-                        seek(Math.min(currentTime + 10, duration));
-                    } else {
-                        next();
-                    }
-                    break;
                 case 'ArrowLeft':
                     event.preventDefault();
-                    if (event.shiftKey) {
-                        // Skip backward 10 seconds
-                        seek(Math.max(currentTime - 10, 0));
-                    } else {
-                        previous();
-                    }
+                    seek(Math.max(0, currentTime - 10));
+                    break;
+                case 'ArrowRight':
+                    event.preventDefault();
+                    seek(Math.min(duration, currentTime + 10));
                     break;
                 case 'ArrowUp':
                     event.preventDefault();
-                    setVolume(Math.min(volume + 0.1, 1));
+                    setVolume(Math.min(1, volume + 0.1));
                     break;
                 case 'ArrowDown':
                     event.preventDefault();
-                    setVolume(Math.max(volume - 0.1, 0));
+                    setVolume(Math.max(0, volume - 0.1));
+                    break;
+                case 'KeyN':
+                    if (event.ctrlKey || event.metaKey) {
+                        event.preventDefault();
+                        next();
+                    }
+                    break;
+                case 'KeyP':
+                    if (event.ctrlKey || event.metaKey) {
+                        event.preventDefault();
+                        previous();
+                    }
                     break;
             }
         };
 
-        document.addEventListener('keydown', handleKeyDown);
-        return () => document.removeEventListener('keydown', handleKeyDown);
-    }, [currentTime, duration, volume, togglePlayPause, next, previous, seek, setVolume]);
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [togglePlayPause, seek, currentTime, duration, setVolume, volume, next, previous]);
 
     return {
         currentSong,
@@ -276,7 +351,10 @@ export function useAudioPlayer(): UseAudioPlayerReturn {
         previous,
         seek,
         setVolume,
-        setPlaylist,
+        setPlaylist: setPlaylistSongs,
         togglePlayPause,
+        playerRef,
+        playerReady,
+        ...playerEventHandlers,
     };
 }
